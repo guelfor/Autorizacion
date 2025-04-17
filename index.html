@@ -2,20 +2,55 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Autorización Guardería - PDF</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"> <!-- Bloquea zoom -->
+  <title>Autorización Guardería - PDF + Email + Loader</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  
+  <!-- Librerías -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/emailjs-com@3/dist/email.min.js"></script>
+
   <style>
-    body { font-family: Arial, sans-serif; padding: 20px; max-width: 600px; margin: auto; }
+    body { font-family: Arial, sans-serif; padding: 20px; max-width: 600px; margin: auto; position: relative; }
     input, canvas, button { width: 100%; margin: 10px 0; }
     canvas { border: 1px solid #000; touch-action: none; }
-    .btn-group button { width: 49%; }
+    .btn-group button { width: 32%; margin-right: 2%; }
+    .btn-group button:last-child { margin-right: 0; }
     #preview { padding: 20px; border: 1px solid #ccc; margin-top: 20px; }
+    #mensaje { margin-top: 20px; font-weight: bold; text-align: center; }
+
+    /* Loader */
+    #loader {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(255, 255, 255, 0.8);
+      z-index: 9999;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      font-weight: bold;
+      color: #333;
+      flex-direction: column;
+    }
+    #spinner {
+      border: 8px solid #f3f3f3;
+      border-top: 8px solid #3498db;
+      border-radius: 50%;
+      width: 60px;
+      height: 60px;
+      animation: spin 1s linear infinite;
+      margin-bottom: 20px;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg);}
+      100% { transform: rotate(360deg);}
+    }
   </style>
 </head>
 <body>
   <h2>Autorización de Salida</h2>
+
   <form id="authForm">
     <label>Nombre del padre/madre:</label>
     <input type="text" id="nombreTutor" required>
@@ -31,9 +66,11 @@
 
     <label>Firma digital (usa el dedo o lápiz):</label>
     <canvas id="firmaCanvas" style="height: 150px;"></canvas>
+
     <div class="btn-group">
-      <button type="button" onclick="limpiarFirma()">Limpiar firma</button>
-      <button type="submit">Generar PDF</button>
+      <button type="button" onclick="limpiarFirma()">🧹 Limpiar firma</button>
+      <button type="button" onclick="generarPDF()">📄 Guardar PDF</button>
+      <button type="button" onclick="generarPDFyEnviar()">📤 Guardar PDF + Enviar Email</button>
     </div>
   </form>
 
@@ -44,11 +81,23 @@
     <img id="firmaImg" style="border:1px solid #ccc; width: 100%; max-width: 300px;">
   </div>
 
+  <div id="mensaje"></div>
+
+  <!-- Loader -->
+  <div id="loader">
+    <div id="spinner"></div>
+    Procesando...
+  </div>
+
   <script>
+    // Inicializar EmailJS
+    (function() {
+      emailjs.init('TU_USER_ID'); // 🔴 Cambia TU_USER_ID por el tuyo real
+    })();
+
     const canvas = document.getElementById("firmaCanvas");
     const ctx = canvas.getContext("2d");
 
-    // Ajustar tamaño real del canvas a lo que ocupa en pantalla
     function redimensionarCanvas() {
       const rect = canvas.getBoundingClientRect();
       canvas.width = rect.width;
@@ -106,28 +155,44 @@
 
     document.getElementById("fechaFirma").valueAsDate = new Date();
 
-    document.getElementById("authForm").addEventListener("submit", async function(e) {
-      e.preventDefault();
-
-      const nombre = document.getElementById("nombreTutor").value;
-      const dni = document.getElementById("dniTutor").value;
-      const nino = document.getElementById("nombreNino").value;
+    function recogerDatosFormulario() {
+      const nombre = document.getElementById("nombreTutor").value.trim();
+      const dni = document.getElementById("dniTutor").value.trim();
+      const nino = document.getElementById("nombreNino").value.trim();
       const fecha = document.getElementById("fechaFirma").value;
-      const firmaImgData = canvas.toDataURL("image/png");
+      const firmaCanvas = document.getElementById("firmaCanvas");
 
+      if (!nombre || !dni || !nino || !fecha) {
+        mostrarMensaje("❗ Por favor, rellena todos los campos.", "red");
+        return null;
+      }
+
+      const firmaImgData = firmaCanvas.toDataURL("image/png");
+      return { nombre, dni, nino, fecha, firmaImgData };
+    }
+
+    function mostrarPreview(nombre, dni, nino, fecha, firmaImgData) {
       document.getElementById("pNombre").innerText = nombre;
       document.getElementById("pDni").innerText = dni;
       document.getElementById("pNino").innerText = nino;
       document.getElementById("pFecha").innerText = fecha;
       document.getElementById("firmaImg").src = firmaImgData;
 
-      const preview = document.getElementById("preview");
-      preview.style.display = "block";
+      document.getElementById("preview").style.display = "block";
+    }
+
+    async function generarPDF() {
+      const datos = recogerDatosFormulario();
+      if (!datos) return;
+
+      mostrarLoader(true);
+      const { nombre, dni, nino, fecha, firmaImgData } = datos;
+
+      mostrarPreview(nombre, dni, nino, fecha, firmaImgData);
 
       await new Promise(resolve => setTimeout(resolve, 300));
 
-      const canvasPreview = await html2canvas(preview);
-
+      const canvasPreview = await html2canvas(document.getElementById("preview"));
       const { jsPDF } = window.jspdf;
       const pdf = new jsPDF();
       const imgData = canvasPreview.toDataURL("image/png");
@@ -138,7 +203,61 @@
       pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
 
       pdf.save(`autorizacion-${nino}.pdf`);
-    });
+
+      mostrarLoader(false);
+      mostrarMensaje("✅ PDF guardado correctamente.", "green");
+    }
+
+    async function generarPDFyEnviar() {
+      const datos = recogerDatosFormulario();
+      if (!datos) return;
+
+      mostrarLoader(true);
+      const { nombre, dni, nino, fecha, firmaImgData } = datos;
+
+      mostrarPreview(nombre, dni, nino, fecha, firmaImgData);
+
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      const canvasPreview = await html2canvas(document.getElementById("preview"));
+      const { jsPDF } = window.jspdf;
+      const pdf = new jsPDF();
+      const imgData = canvasPreview.toDataURL("image/png");
+
+      const imgProps = pdf.getImageProperties(imgData);
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+
+      pdf.save(`autorizacion-${nino}.pdf`);
+
+      emailjs.send('TU_SERVICE_ID', 'TU_TEMPLATE_ID', {
+        nombre_tutor: nombre,
+        dni_tutor: dni,
+        nombre_nino: nino,
+        fecha_firma: fecha,
+        firma_imagen: firmaImgData
+      })
+      .then(function(response) {
+        mostrarLoader(false);
+        mostrarMensaje("✅ PDF guardado y email enviado correctamente.", "green");
+      }, function(error) {
+        mostrarLoader(false);
+        mostrarMensaje("❌ Error al enviar el email.", "red");
+        console.error(error);
+      });
+    }
+
+    function mostrarMensaje(texto, color) {
+      const mensajeDiv = document.getElementById("mensaje");
+      mensajeDiv.innerText = texto;
+      mensajeDiv.style.color = color;
+    }
+
+    function mostrarLoader(mostrar) {
+      const loader = document.getElementById("loader");
+      loader.style.display = mostrar ? "flex" : "none";
+    }
   </script>
 </body>
 </html>
