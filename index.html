@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Autorización Guardería - PDF</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"> <!-- Bloquea zoom -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; max-width: 600px; margin: auto; }
+    input, canvas, button { width: 100%; margin: 10px 0; }
+    canvas { border: 1px solid #000; touch-action: none; }
+    .btn-group button { width: 49%; }
+    #preview { padding: 20px; border: 1px solid #ccc; margin-top: 20px; }
+  </style>
+</head>
+<body>
+  <h2>Autorización de Salida</h2>
+  <form id="authForm">
+    <label>Nombre del padre/madre:</label>
+    <input type="text" id="nombreTutor" required>
+
+    <label>DNI:</label>
+    <input type="text" id="dniTutor" required>
+
+    <label>Nombre del niño/a:</label>
+    <input type="text" id="nombreNino" required>
+
+    <label>Fecha:</label>
+    <input type="date" id="fechaFirma" required>
+
+    <label>Firma digital (usa el dedo o lápiz):</label>
+    <canvas id="firmaCanvas" style="height: 150px;"></canvas>
+    <div class="btn-group">
+      <button type="button" onclick="limpiarFirma()">Limpiar firma</button>
+      <button type="submit">Generar PDF</button>
+    </div>
+  </form>
+
+  <div id="preview" style="display: none;">
+    <p>Yo, <strong id="pNombre"></strong>, con DNI <strong id="pDni"></strong>, autorizo a mi hijo/a <strong id="pNino"></strong> a participar en el taller de luz negra en la guardería "El Parque".</p>
+    <p>Yecla, a <strong id="pFecha"></strong></p>
+    <p><strong>Firma:</strong></p>
+    <img id="firmaImg" style="border:1px solid #ccc; width: 100%; max-width: 300px;">
+  </div>
+
+  <script>
+    const canvas = document.getElementById("firmaCanvas");
+    const ctx = canvas.getContext("2d");
+
+    // Ajustar tamaño real del canvas a lo que ocupa en pantalla
+    function redimensionarCanvas() {
+      const rect = canvas.getBoundingClientRect();
+      canvas.width = rect.width;
+      canvas.height = rect.height;
+    }
+    redimensionarCanvas();
+
+    let dibujando = false;
+
+    const iniciarFirma = (e) => {
+      e.preventDefault();
+      dibujando = true;
+      ctx.beginPath();
+      const pos = obtenerPos(e);
+      ctx.moveTo(pos.x, pos.y);
+    };
+
+    const dibujar = (e) => {
+      e.preventDefault();
+      if (!dibujando) return;
+      const pos = obtenerPos(e);
+      ctx.lineTo(pos.x, pos.y);
+      ctx.stroke();
+    };
+
+    const finalizarFirma = (e) => {
+      e.preventDefault();
+      dibujando = false;
+    };
+
+    const obtenerPos = (e) => {
+      const rect = canvas.getBoundingClientRect();
+      let x, y;
+      if (e.touches) {
+        x = e.touches[0].clientX - rect.left;
+        y = e.touches[0].clientY - rect.top;
+      } else {
+        x = e.clientX - rect.left;
+        y = e.clientY - rect.top;
+      }
+      return { x, y };
+    };
+
+    canvas.addEventListener("mousedown", iniciarFirma);
+    canvas.addEventListener("mousemove", dibujar);
+    canvas.addEventListener("mouseup", finalizarFirma);
+    canvas.addEventListener("mouseout", finalizarFirma);
+    canvas.addEventListener("touchstart", iniciarFirma, { passive: false });
+    canvas.addEventListener("touchmove", dibujar, { passive: false });
+    canvas.addEventListener("touchend", finalizarFirma, { passive: false });
+
+    function limpiarFirma() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+
+    document.getElementById("fechaFirma").valueAsDate = new Date();
+
+    document.getElementById("authForm").addEventListener("submit", async function(e) {
+      e.preventDefault();
+
+      const nombre = document.getElementById("nombreTutor").value;
+      const dni = document.getElementById("dniTutor").value;
+      const nino = document.getElementById("nombreNino").value;
+      const fecha = document.getElementById("fechaFirma").value;
+      const firmaImgData = canvas.toDataURL("image/png");
+
+      document.getElementById("pNombre").innerText = nombre;
+      document.getElementById("pDni").innerText = dni;
+      document.getElementById("pNino").innerText = nino;
+      document.getElementById("pFecha").innerText = fecha;
+      document.getElementById("firmaImg").src = firmaImgData;
+
+      const preview = document.getElementById("preview");
+      preview.style.display = "block";
+
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      const canvasPreview = await html2canvas(preview);
+
+      const { jsPDF } = window.jspdf;
+      const pdf = new jsPDF();
+      const imgData = canvasPreview.toDataURL("image/png");
+
+      const imgProps = pdf.getImageProperties(imgData);
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+
+      pdf.save(`autorizacion-${nino}.pdf`);
+    });
+  </script>
+</body>
+</html>
