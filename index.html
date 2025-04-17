@@ -92,7 +92,7 @@
   <script>
     // Inicializar EmailJS
     (function() {
-      emailjs.init('TU_USER_ID'); // 🔴 Cambia TU_USER_ID por el tuyo real
+      emailjs.init('_CJGWni5cNXOoX1z6'); // 🔴 Cambia TU_USER_ID por el tuyo real
     })();
 
     const canvas = document.getElementById("firmaCanvas");
@@ -231,7 +231,7 @@
 
       pdf.save(`autorizacion-${nino}.pdf`);
 
-      emailjs.send('TU_SERVICE_ID', 'TU_TEMPLATE_ID', {
+      emailjs.send('service_livfmpc', 'template_96k0plg', {
         nombre_tutor: nombre,
         dni_tutor: dni,
         nombre_nino: nino,
